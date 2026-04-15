@@ -9,10 +9,23 @@ function App() {
   const [lastAction, setLastAction] = useState("idle");
 
   const hasResult = Boolean(result);
+  const status = result?.status ?? null;
+  const isVerified = status === "VERIFIED";
+  const isForensic = status === "UNVERIFIED";
+  const isError = status === "AI_ERROR";
   const trustScore = hasResult ? Number(result?.trust_score ?? 0) : null;
   const deepfakeScore = result?.ai_analysis ? Number(result.ai_analysis.deepfake_score ?? 0) : null;
   const authenticitySignal = deepfakeScore === null ? null : Math.max(0, Math.min(100, 100 - deepfakeScore));
   const verdict = result?.ai_analysis?.verdict ?? "Not available";
+  const systemMode = !hasResult
+    ? "Awaiting analysis"
+    : isVerified
+      ? "Provenance Verified"
+      : isForensic
+        ? "AI Forensic Mode"
+        : "Verification Error";
+  const verdictLabel = !hasResult ? "Awaiting verification" : result.ai_analysis ? verdict : "Trusted record";
+  const deepfakeScoreLabel = deepfakeScore === null ? "Not required" : deepfakeScore;
   const confidenceBand =
     trustScore === null
       ? "Awaiting verification"
@@ -60,6 +73,19 @@ function App() {
     weightedEvidence === null
       ? "Pending"
       : `${Math.max(0, Math.min(100, weightedEvidence))}% stable`;
+  const confidenceNarrative = hasResult
+    ? `${confidenceBand} with ${riskLevel.toLowerCase()} based on current trust evidence.`
+    : "Run verification to generate trust interpretation and risk posture.";
+  const provenanceInterpretation = isVerified
+    ? `Signed provenance match found for ${result?.metadata?.filename ?? "this media file"}.`
+    : isForensic
+      ? "No matching provenance record was found; AI fallback was executed."
+      : "Verification could not complete due to upstream analysis failure.";
+  const forensicInterpretation = result?.ai_analysis
+    ? "AI forensic analysis executed because provenance evidence was unavailable."
+    : "Verification completed using provenance evidence without AI fallback.";
+  const verifiedBranchActive = isVerified;
+  const forensicBranchActive = isForensic || isError;
   const trustSignals = [
     { label: "Provenance", value: provenanceSignal, tone: "from-emerald-400 to-cyan-300" },
     { label: "AI Authenticity", value: authenticitySignal, tone: "from-sky-400 to-blue-300" },
@@ -268,7 +294,7 @@ function App() {
                 </h2>
               </div>
               <span className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs text-slate-300">
-                {result ? result.status : "Awaiting result"}
+                {status ?? "Awaiting result"}
               </span>
             </div>
 
@@ -281,7 +307,7 @@ function App() {
                         Status
                       </p>
                       <p className="mt-3 text-lg font-semibold text-white">
-                        {result.status}
+                        {status}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
@@ -297,7 +323,7 @@ function App() {
                         System Mode
                       </p>
                       <p className="mt-3 text-lg font-semibold text-white">
-                        {result.status === "VERIFIED" ? "Provenance Verified" : "AI Forensic Mode"}
+                        {systemMode}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
@@ -305,7 +331,7 @@ function App() {
                         Verdict
                       </p>
                       <p className="mt-3 text-lg font-semibold text-white">
-                        {result.ai_analysis ? verdict : "Trusted record"}
+                        {verdictLabel}
                       </p>
                     </div>
                   </div>
@@ -314,10 +340,10 @@ function App() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-slate-300">
-                          System Mode: {result.status === "VERIFIED" ? "Provenance Verified" : "AI Forensic Mode"}
+                          System Mode: {systemMode}
                         </p>
                         <p className="mt-1 text-sm text-slate-400">
-                          {confidenceBand} with {riskLevel.toLowerCase()} based on current trust evidence.
+                          {confidenceNarrative}
                         </p>
                       </div>
                       <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.22em] text-slate-300">
@@ -350,7 +376,7 @@ function App() {
                           AI deepfake score
                         </p>
                         <p className="mt-2 text-sm text-slate-200">
-                          {result.ai_analysis ? deepfakeScore : "Not required"}
+                          {deepfakeScoreLabel}
                         </p>
                       </div>
                     </div>
@@ -370,11 +396,9 @@ function App() {
                       </div>
                       <div className="grid grid-cols-3 border-t border-white/10 text-sm">
                         <div className="border-r border-white/10 px-4 py-3 text-slate-300">Provenance status</div>
-                        <div className="border-r border-white/10 px-4 py-3 text-white">{result.status}</div>
+                        <div className="border-r border-white/10 px-4 py-3 text-white">{status}</div>
                         <div className="px-4 py-3 text-slate-300">
-                          {result.status === "VERIFIED"
-                            ? "Historical trust evidence was found."
-                            : "No matching provenance record was found."}
+                          {provenanceInterpretation}
                         </div>
                       </div>
                       <div className="grid grid-cols-3 border-t border-white/10 text-sm">
@@ -388,9 +412,7 @@ function App() {
                           {result.ai_analysis ? verdict : "N/A"}
                         </div>
                         <div className="px-4 py-3 text-slate-300">
-                          {result.ai_analysis
-                            ? "AI heuristic triggered due to missing provenance."
-                            : "Verification completed via provenance evidence only."}
+                          {forensicInterpretation}
                         </div>
                       </div>
                     </div>
@@ -419,21 +441,21 @@ function App() {
                         <text x="260" y="112" textAnchor="middle" fill="#e2e8f0" fontSize="16">Hash + Metadata</text>
                         <text x="260" y="133" textAnchor="middle" fill="#94a3b8" fontSize="12">sign and compare</text>
 
-                        <rect x="385" y="34" width="190" height="72" rx="18" fill="#0f172a" stroke="#22c55e" />
+                        <rect x="385" y="34" width="190" height="72" rx="18" fill="#0f172a" stroke={verifiedBranchActive ? "#22c55e" : "#334155"} />
                         <text x="480" y="61" textAnchor="middle" fill="#dcfce7" fontSize="16">Verified Path</text>
-                        <text x="480" y="82" textAnchor="middle" fill="#86efac" fontSize="12">provenance verified</text>
+                        <text x="480" y="82" textAnchor="middle" fill="#86efac" fontSize="12">{isVerified ? "active" : "standby"}</text>
 
-                        <rect x="385" y="138" width="190" height="72" rx="18" fill="#0f172a" stroke="#38bdf8" />
+                        <rect x="385" y="138" width="190" height="72" rx="18" fill="#0f172a" stroke={forensicBranchActive ? "#38bdf8" : "#334155"} />
                         <text x="480" y="165" textAnchor="middle" fill="#e0f2fe" fontSize="16">AI Forensic Path</text>
-                        <text x="480" y="186" textAnchor="middle" fill="#7dd3fc" fontSize="12">deepfake scoring fallback</text>
+                        <text x="480" y="186" textAnchor="middle" fill="#7dd3fc" fontSize="12">{forensicBranchActive ? "active" : "standby"}</text>
 
                         <path d="M145 121 H185" stroke="url(#pathGlow)" strokeWidth="4" strokeLinecap="round" />
-                        <path d="M335 121 H360 Q375 121 375 106 V84" stroke="#22c55e" strokeWidth="4" fill="none" strokeLinecap="round" />
-                        <path d="M335 121 H360 Q375 121 375 136 V174" stroke="#38bdf8" strokeWidth="4" fill="none" strokeLinecap="round" />
+                        <path d="M335 121 H360 Q375 121 375 106 V84" stroke={verifiedBranchActive ? "#22c55e" : "#475569"} strokeWidth="4" fill="none" strokeLinecap="round" />
+                        <path d="M335 121 H360 Q375 121 375 136 V174" stroke={forensicBranchActive ? "#38bdf8" : "#475569"} strokeWidth="4" fill="none" strokeLinecap="round" />
 
                         <circle cx="335" cy="121" r="7" fill="#e2e8f0" />
-                        <text x="363" y="100" fill="#86efac" fontSize="12">record found</text>
-                        <text x="363" y="146" fill="#7dd3fc" fontSize="12">record missing</text>
+                        <text x="363" y="100" fill="#86efac" fontSize="12">{isVerified ? "record found" : "not selected"}</text>
+                        <text x="363" y="146" fill="#7dd3fc" fontSize="12">{forensicBranchActive ? "record missing" : "not selected"}</text>
                       </svg>
                     </div>
                   </div>
@@ -543,7 +565,7 @@ function App() {
                     Active Mode
                   </p>
                   <p className="mt-3 text-base font-semibold text-white">
-                    {result ? (result.status === "VERIFIED" ? "Provenance Verified" : "AI Forensic Mode") : "Awaiting analysis"}
+                    {systemMode}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-4">
@@ -551,7 +573,7 @@ function App() {
                     Forensic Verdict
                   </p>
                   <p className="mt-3 text-base font-semibold text-white">
-                    {result?.ai_analysis ? verdict : "Trusted record"}
+                    {verdictLabel}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/55 p-4">
