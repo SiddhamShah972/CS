@@ -11,6 +11,7 @@ function App() {
   const hasResult = Boolean(result);
   const trustScore = hasResult ? Number(result?.trust_score ?? 0) : null;
   const deepfakeScore = result?.ai_analysis ? Number(result.ai_analysis.deepfake_score ?? 0) : null;
+  const authenticitySignal = deepfakeScore === null ? null : Math.max(0, Math.min(100, 100 - deepfakeScore));
   const verdict = result?.ai_analysis?.verdict ?? "Not available";
   const confidenceBand =
     trustScore === null
@@ -40,16 +41,28 @@ function App() {
   const normalizedTrustScore = trustScore === null ? 0 : Math.min(Math.max(trustScore, 0), 100);
   const trustStrokeOffset =
     trustCircumference - (normalizedTrustScore / 100) * trustCircumference;
-  const provenanceSignal = hasResult ? (result.status === "VERIFIED" ? 100 : 0) : null;
-  const forensicSignal = hasResult && deepfakeScore !== null ? Math.max(0, Math.min(100, 100 - deepfakeScore)) : null;
+  const provenanceSignal = hasResult
+    ? result.status === "VERIFIED"
+      ? 100
+      : result.status === "UNVERIFIED"
+        ? 20
+        : 0
+    : null;
   const confidenceSignal = trustScore;
+  const TRUST_WEIGHT = 0.7;
+  const AUTHENTICITY_WEIGHT = 0.3;
+  const weightedEvidence = trustScore === null
+    ? null
+    : authenticitySignal === null
+      ? trustScore
+      : Math.round((trustScore * TRUST_WEIGHT) + (authenticitySignal * AUTHENTICITY_WEIGHT));
   const evidenceStrength =
-    trustScore === null
+    weightedEvidence === null
       ? "Pending"
-      : `${Math.max(0, Math.min(100, Math.round(trustScore - ((deepfakeScore ?? 0) / 3))))}% stable`;
+      : `${Math.max(0, Math.min(100, weightedEvidence))}% stable`;
   const trustSignals = [
     { label: "Provenance", value: provenanceSignal, tone: "from-emerald-400 to-cyan-300" },
-    { label: "Forensic", value: forensicSignal, tone: "from-sky-400 to-blue-300" },
+    { label: "AI Authenticity", value: authenticitySignal, tone: "from-sky-400 to-blue-300" },
     { label: "Confidence", value: confidenceSignal, tone: "from-amber-300 to-orange-300" },
   ];
 
