@@ -3,6 +3,13 @@ import axios from "axios";
 
 function App() {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+  const MIN_SIGNAL_PERCENT = 6;
+  const NO_DATA_DISPLAY = "—";
+  const TRUST_SCORE_WEIGHT = 0.7;
+  const AUTHENTICITY_SCORE_WEIGHT = 0.3;
+  const PROVENANCE_SIGNAL_VERIFIED = 100;
+  const PROVENANCE_SIGNAL_UNVERIFIED = 20;
+  const PROVENANCE_SIGNAL_DEFAULT = 0;
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -13,22 +20,19 @@ function App() {
   const isVerified = status === "VERIFIED";
   const isForensic = status === "UNVERIFIED";
   const isError = status === "AI_ERROR";
-  const MIN_SIGNAL_PERCENT = 6;
-  const NO_DATA_DISPLAY = "—";
   const trustScore = hasResult ? Number(result?.trust_score ?? 0) : null;
-  const rawDeepfakeScore = result?.ai_analysis ? Number(result.ai_analysis.deepfake_score) : null;
+  const rawDeepfakeScore = hasResult ? Number(result?.ai_analysis?.deepfake_score ?? NaN) : NaN;
   const deepfakeScore = rawDeepfakeScore === null || Number.isNaN(rawDeepfakeScore)
     ? null
     : Math.max(0, Math.min(100, rawDeepfakeScore));
   const authenticitySignal = deepfakeScore === null ? null : Math.max(0, Math.min(100, 100 - deepfakeScore));
   const verdict = result?.ai_analysis?.verdict ?? "Not available";
-  const systemMode = !hasResult
-    ? "Awaiting analysis"
-    : isVerified
-      ? "Provenance Verified"
-      : isForensic
-        ? "AI Forensic Mode"
-        : "Verification Error";
+  const systemModeByStatus = {
+    VERIFIED: "Provenance Verified",
+    UNVERIFIED: "AI Forensic Mode",
+    AI_ERROR: "Verification Error",
+  };
+  const systemMode = hasResult ? (systemModeByStatus[status] ?? "Verification Complete") : "Awaiting analysis";
   const verdictLabel = !hasResult ? "Awaiting verification" : result.ai_analysis ? verdict : "Trusted record";
   const deepfakeScoreLabel = deepfakeScore === null ? "Not required" : deepfakeScore;
   const confidenceBand =
@@ -59,21 +63,20 @@ function App() {
   const safeTrustScore = trustScore === null ? 0 : Math.min(Math.max(trustScore, 0), 100);
   const trustStrokeOffset =
     trustCircumference - (safeTrustScore / 100) * trustCircumference;
-  const provenanceSignal = hasResult
-    ? result.status === "VERIFIED"
-      ? 100
-      : result.status === "UNVERIFIED"
-        ? 20
-        : 0
-    : null;
-  const confidenceSignal = trustScore;
-  const TRUST_SCORE_WEIGHT = 0.7;
-  const AUTHENTICITY_SCORE_WEIGHT = 0.3;
-  const weightedEvidence = trustScore === null
+  const provenanceSignal = !hasResult
     ? null
-    : authenticitySignal === null
+    : isVerified
+      ? PROVENANCE_SIGNAL_VERIFIED
+      : isForensic
+        ? PROVENANCE_SIGNAL_UNVERIFIED
+        : PROVENANCE_SIGNAL_DEFAULT;
+  const confidenceSignal = trustScore;
+  let weightedEvidence = null;
+  if (trustScore !== null) {
+    weightedEvidence = authenticitySignal === null
       ? trustScore
       : Math.round((trustScore * TRUST_SCORE_WEIGHT) + (authenticitySignal * AUTHENTICITY_SCORE_WEIGHT));
+  }
   const evidenceStrength =
     weightedEvidence === null
       ? "Pending"
