@@ -13,8 +13,13 @@ function App() {
   const isVerified = status === "VERIFIED";
   const isForensic = status === "UNVERIFIED";
   const isError = status === "AI_ERROR";
+  const MIN_SIGNAL_PERCENT = 6;
+  const NO_DATA_DISPLAY = "—";
   const trustScore = hasResult ? Number(result?.trust_score ?? 0) : null;
-  const deepfakeScore = result?.ai_analysis ? Number(result.ai_analysis.deepfake_score ?? 0) : null;
+  const rawDeepfakeScore = result?.ai_analysis ? Number(result.ai_analysis.deepfake_score) : null;
+  const deepfakeScore = rawDeepfakeScore === null || Number.isNaN(rawDeepfakeScore)
+    ? null
+    : Math.max(0, Math.min(100, rawDeepfakeScore));
   const authenticitySignal = deepfakeScore === null ? null : Math.max(0, Math.min(100, 100 - deepfakeScore));
   const verdict = result?.ai_analysis?.verdict ?? "Not available";
   const systemMode = !hasResult
@@ -51,9 +56,9 @@ function App() {
         ? "from-amber-300 via-orange-300 to-yellow-200"
         : "from-rose-400 via-red-400 to-orange-300";
   const trustCircumference = 2 * Math.PI * 52;
-  const normalizedTrustScore = trustScore === null ? 0 : Math.min(Math.max(trustScore, 0), 100);
+  const safeTrustScore = trustScore === null ? 0 : Math.min(Math.max(trustScore, 0), 100);
   const trustStrokeOffset =
-    trustCircumference - (normalizedTrustScore / 100) * trustCircumference;
+    trustCircumference - (safeTrustScore / 100) * trustCircumference;
   const provenanceSignal = hasResult
     ? result.status === "VERIFIED"
       ? 100
@@ -62,13 +67,13 @@ function App() {
         : 0
     : null;
   const confidenceSignal = trustScore;
-  const TRUST_WEIGHT = 0.7;
-  const AUTHENTICITY_WEIGHT = 0.3;
+  const TRUST_SCORE_WEIGHT = 0.7;
+  const AUTHENTICITY_SCORE_WEIGHT = 0.3;
   const weightedEvidence = trustScore === null
     ? null
     : authenticitySignal === null
       ? trustScore
-      : Math.round((trustScore * TRUST_WEIGHT) + (authenticitySignal * AUTHENTICITY_WEIGHT));
+      : Math.round((trustScore * TRUST_SCORE_WEIGHT) + (authenticitySignal * AUTHENTICITY_SCORE_WEIGHT));
   const evidenceStrength =
     weightedEvidence === null
       ? "Pending"
@@ -354,7 +359,7 @@ function App() {
                     <div className="mt-5 h-5 overflow-hidden rounded-full bg-slate-800">
                       <div
                         className={`h-full rounded-full bg-gradient-to-r ${trustBarClass} transition-all duration-700`}
-                        style={{ width: `${normalizedTrustScore}%` }}
+                        style={{ width: `${Math.max(safeTrustScore, MIN_SIGNAL_PERCENT)}%` }}
                       />
                     </div>
 
@@ -525,7 +530,7 @@ function App() {
                         </linearGradient>
                       </defs>
                       <text x="70" y="64" textAnchor="middle" fill="#f8fafc" fontSize="30" fontWeight="700">
-                        {hasResult ? trustScore : "--"}
+                        {hasResult ? trustScore : NO_DATA_DISPLAY}
                       </text>
                       <text x="70" y="86" textAnchor="middle" fill="#94a3b8" fontSize="11" letterSpacing="2">
                         TRUST SCORE
@@ -543,11 +548,11 @@ function App() {
                   <div className="mt-6 flex h-[184px] items-end justify-between gap-4">
                     {trustSignals.map((bar) => (
                       <div key={bar.label} className="flex flex-1 flex-col items-center gap-3">
-                        <span className="text-xs text-slate-400">{bar.value === null ? "—" : bar.value}</span>
+                        <span className="text-xs text-slate-400">{bar.value === null ? NO_DATA_DISPLAY : bar.value}</span>
                         <div className="flex h-full w-full items-end rounded-full bg-slate-900/80 p-2">
                           <div
                             className={`w-full rounded-full bg-gradient-to-t ${bar.tone} shadow-[0_12px_32px_rgba(15,23,42,0.35)]`}
-                            style={{ height: `${bar.value === null ? 6 : Math.max(6, bar.value)}%` }}
+                            style={{ height: `${bar.value === null ? MIN_SIGNAL_PERCENT : Math.max(MIN_SIGNAL_PERCENT, bar.value)}%` }}
                           />
                         </div>
                         <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
