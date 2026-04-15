@@ -2,27 +2,56 @@ import { useState } from "react";
 import axios from "axios";
 
 function App() {
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastAction, setLastAction] = useState("idle");
 
-  const trustScore = Number(result?.trust_score ?? 0);
-  const deepfakeScore = Number(result?.ai_analysis?.deepfake_score ?? 0);
-  const verdict = result?.ai_analysis?.verdict ?? "Pending";
+  const hasResult = Boolean(result);
+  const trustScore = hasResult ? Number(result?.trust_score ?? 0) : null;
+  const deepfakeScore = result?.ai_analysis ? Number(result.ai_analysis.deepfake_score ?? 0) : null;
+  const verdict = result?.ai_analysis?.verdict ?? "Not available";
   const confidenceBand =
-    trustScore >= 80 ? "High confidence" : trustScore >= 50 ? "Review advised" : "Critical review";
+    trustScore === null
+      ? "Awaiting verification"
+      : trustScore >= 80
+        ? "High confidence"
+        : trustScore >= 50
+          ? "Review advised"
+          : "Critical review";
   const riskLevel =
-    trustScore >= 80 ? "Low tamper risk" : trustScore >= 50 ? "Medium tamper risk" : "High tamper risk";
+    trustScore === null
+      ? "Awaiting verification"
+      : trustScore >= 80
+        ? "Low tamper risk"
+        : trustScore >= 50
+          ? "Medium tamper risk"
+          : "High tamper risk";
   const trustBarClass =
-    trustScore >= 80
+    trustScore === null
+      ? "from-slate-500 via-slate-400 to-slate-300"
+      : trustScore >= 80
       ? "from-emerald-400 via-lime-300 to-cyan-300"
       : trustScore >= 50
         ? "from-amber-300 via-orange-300 to-yellow-200"
         : "from-rose-400 via-red-400 to-orange-300";
   const trustCircumference = 2 * Math.PI * 52;
+  const normalizedTrustScore = trustScore === null ? 0 : Math.min(Math.max(trustScore, 0), 100);
   const trustStrokeOffset =
-    trustCircumference - (Math.min(Math.max(trustScore, 0), 100) / 100) * trustCircumference;
+    trustCircumference - (normalizedTrustScore / 100) * trustCircumference;
+  const provenanceSignal = hasResult ? (result.status === "VERIFIED" ? 100 : 0) : null;
+  const forensicSignal = hasResult && deepfakeScore !== null ? Math.max(0, Math.min(100, 100 - deepfakeScore)) : null;
+  const confidenceSignal = trustScore;
+  const evidenceStrength =
+    trustScore === null
+      ? "Pending"
+      : `${Math.max(0, Math.min(100, Math.round(trustScore - ((deepfakeScore ?? 0) / 3))))}% stable`;
+  const trustSignals = [
+    { label: "Provenance", value: provenanceSignal, tone: "from-emerald-400 to-cyan-300" },
+    { label: "Forensic", value: forensicSignal, tone: "from-sky-400 to-blue-300" },
+    { label: "Confidence", value: confidenceSignal, tone: "from-amber-300 to-orange-300" },
+  ];
 
   const fileSummary = file
     ? {
@@ -41,7 +70,7 @@ function App() {
     try {
       setLoading(true);
       setLastAction("upload");
-      await axios.post("http://localhost:5000/api/upload", formData);
+      await axios.post(`${API_BASE_URL}/api/upload`, formData);
       alert("Video signed successfully");
     } catch (err) {
       const message =
@@ -61,7 +90,7 @@ function App() {
     try {
       setLoading(true);
       setLastAction("verify");
-      const res = await axios.post("http://localhost:5000/api/verify", formData);
+      const res = await axios.post(`${API_BASE_URL}/api/verify`, formData);
       setResult(res.data);
     } catch (err) {
       const message =
@@ -286,7 +315,7 @@ function App() {
                     <div className="mt-5 h-5 overflow-hidden rounded-full bg-slate-800">
                       <div
                         className={`h-full rounded-full bg-gradient-to-r ${trustBarClass} transition-all duration-700`}
-                        style={{ width: `${Math.max(trustScore, 6)}%` }}
+                        style={{ width: `${normalizedTrustScore}%` }}
                       />
                     </div>
 
@@ -461,7 +490,7 @@ function App() {
                         </linearGradient>
                       </defs>
                       <text x="70" y="64" textAnchor="middle" fill="#f8fafc" fontSize="30" fontWeight="700">
-                        {result ? trustScore : "--"}
+                        {hasResult ? trustScore : "--"}
                       </text>
                       <text x="70" y="86" textAnchor="middle" fill="#94a3b8" fontSize="11" letterSpacing="2">
                         TRUST SCORE
@@ -477,29 +506,13 @@ function App() {
                     Verification Balance
                   </p>
                   <div className="mt-6 flex h-[184px] items-end justify-between gap-4">
-                    {[
-                      {
-                        label: "Provenance",
-                        value: result?.status === "VERIFIED" ? 96 : 34,
-                        tone: "from-emerald-400 to-cyan-300",
-                      },
-                      {
-                        label: "Forensic",
-                        value: result?.ai_analysis ? Math.max(22, 100 - deepfakeScore) : 78,
-                        tone: "from-sky-400 to-blue-300",
-                      },
-                      {
-                        label: "Confidence",
-                        value: result ? trustScore : 52,
-                        tone: "from-amber-300 to-orange-300",
-                      },
-                    ].map((bar) => (
+                    {trustSignals.map((bar) => (
                       <div key={bar.label} className="flex flex-1 flex-col items-center gap-3">
-                        <span className="text-xs text-slate-400">{bar.value}</span>
+                        <span className="text-xs text-slate-400">{bar.value === null ? "—" : bar.value}</span>
                         <div className="flex h-full w-full items-end rounded-full bg-slate-900/80 p-2">
                           <div
                             className={`w-full rounded-full bg-gradient-to-t ${bar.tone} shadow-[0_12px_32px_rgba(15,23,42,0.35)]`}
-                            style={{ height: `${bar.value}%` }}
+                            style={{ height: `${bar.value === null ? 6 : Math.max(6, bar.value)}%` }}
                           />
                         </div>
                         <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
@@ -533,7 +546,7 @@ function App() {
                     Evidence Strength
                   </p>
                   <p className="mt-3 text-base font-semibold text-white">
-                    {result ? `${Math.max(35, trustScore - Math.floor(deepfakeScore / 3))}% stable` : "Pending"}
+                    {evidenceStrength}
                   </p>
                 </div>
               </div>
